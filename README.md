@@ -1,5 +1,4 @@
 # Logship Template Exporter
-[![Build & Release](https://github.com/shoeletz/logship-template-exporter/actions/workflows/build.yml/badge.svg)](https://github.com/shoeletz/logship-template-exporter/actions/workflows/build.yml)
 
 A .NET template for creating custom Logship exporters. This template provides a foundation for building data exporters that send information to Logship.
 
