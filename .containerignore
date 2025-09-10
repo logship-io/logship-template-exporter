@@ -1,0 +1,31 @@
+# Exclude common large directories and files
+.git/
+.vs/
+bin/
+obj/
+packages/
+node_modules/
+*.log
+*.tmp
+*.cache
+TestResults/
+.vscode/
+.idea/
+*.user
+*.suo
+*.swp
+*~
+
+# Exclude test directories if not needed for build
+test/
+
+# Exclude documentation that's not needed for build
+*.md
+docs/
+
+# Exclude CI/CD files
+.github/
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+azure-pipelines.yml

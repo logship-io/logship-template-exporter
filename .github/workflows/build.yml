@@ -1,0 +1,106 @@
+name: Build & Release
+
+on:
+  push:
+    branches:
+      - "master"
+    tags:
+      - v*
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  DOTNET_VERSION: '9.0.103'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - runtime: win-x64
+            os: windows-latest
+          - runtime: win-arm64
+            os: windows-latest
+          - runtime: linux-x64
+            os: ubuntu-latest
+          - runtime: linux-arm64
+            os: ubuntu-22.04-arm
+          - runtime: osx-x64
+            os: macos-latest
+          - runtime: osx-arm64
+            os: macos-latest
+          
+    name: Build
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ARM dependencies
+        if: ${{ matrix.os == 'ubuntu-latest' && matrix.runtime == 'linux-arm64' }}
+        run: |
+          sudo apt-get install gcc make gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu zlib1g-dev
+
+      - name: Setup .NET Core
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: Build
+        run: |
+          git submodule update --init --recursive
+          dotnet publish src/ConsoleHost/Logship.Template.Exporter/Logship.Template.Exporter.ConsoleHost.csproj  -c Release -r ${{ matrix.runtime }} -o out --self-contained true
+
+      - name: Package
+        shell: pwsh
+        run: |
+          Get-ChildItem ".\out\Logship.Template.Exporter.ConsoleHost.exe", ".\out\Logship.Template.Exporter.ConsoleHost", ".\out\appsettings.json" -ErrorAction SilentlyContinue |
+          Compress-Archive -DestinationPath "LogshipTemplateExporter-${{ matrix.runtime }}.zip"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.runtime }}
+          path: |
+            *.zip
+  
+  container-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build OCI Image
+        run: |
+          podman build . --file Containerfile --tag ghcr.io/${{ github.repository }}:$GITHUB_REF_NAME
+      
+      - name: Push OCI Image
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          podman tag ghcr.io/${{ github.repository }}:$GITHUB_REF_NAME ghcr.io/${{ github.repository }}:latest
+          podman push ghcr.io/${{ github.repository }}:$GITHUB_REF_NAME
+          podman push ghcr.io/${{ github.repository }}:latest
+        
+  bin-release:
+    runs-on: ubuntu-latest
+    name: Release ${{ github.ref_name }}
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out/
+          
+      - uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: false
+          draft: false
+          title: "Release ${{ github.ref_name }}"
+          files: |
+            out/**/*
